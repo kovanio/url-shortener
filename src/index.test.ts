@@ -109,6 +109,78 @@ describe('URL Shortener API', () => {
       expect(mockKV.put).toHaveBeenCalled()
     })
 
+    it('should create a short URL with a custom slug', async () => {
+      const req = createRequest('POST', '/api/shorten', { url: 'https://example.com', slug: 'my_custom-slug' })
+
+      const res = await app.fetch(req, {
+        URL_DB: mockKV,
+        DB: mockD1
+      }, mockExecutionCtx)
+
+      expect(res.status).toBe(201)
+
+      const json = await res.json() as any
+      expect(json.slug).toBe('my_custom-slug')
+      expect(json.short_url).toBe('http://localhost/my_custom-slug')
+      expect(json.stats_url).toBe('http://localhost/api/stats/my_custom-slug')
+      expect(mockKV.put).toHaveBeenCalledWith('my_custom-slug', 'https://example.com')
+    })
+
+    it('should return 409 when custom slug already exists', async () => {
+      mockKV._store.set('takenSlug', 'https://already.example')
+
+      const req = createRequest('POST', '/api/shorten', { url: 'https://example.com', slug: 'takenSlug' })
+
+      const res = await app.fetch(req, {
+        URL_DB: mockKV,
+        DB: mockD1
+      }, mockExecutionCtx)
+
+      expect(res.status).toBe(409)
+      const json = await res.json() as any
+      expect(json.error).toBe('Slug already in use')
+    })
+
+    it('should return 400 for invalid custom slug format', async () => {
+      const req = createRequest('POST', '/api/shorten', { url: 'https://example.com', slug: 'invalid!' })
+
+      const res = await app.fetch(req, {
+        URL_DB: mockKV,
+        DB: mockD1
+      }, mockExecutionCtx)
+
+      expect(res.status).toBe(400)
+      const json = await res.json() as any
+      expect(json.error).toBe('Invalid slug')
+    })
+
+    it.each(['api', 'stats'])('should return 400 for reserved slug "%s"', async (reserved) => {
+      const req = createRequest('POST', '/api/shorten', { url: 'https://example.com', slug: reserved })
+
+      const res = await app.fetch(req, {
+        URL_DB: mockKV,
+        DB: mockD1
+      }, mockExecutionCtx)
+
+      expect(res.status).toBe(400)
+      const json = await res.json() as any
+      expect(json.error).toBe('Slug is reserved')
+    })
+
+    it('should still generate a random slug when none is provided (regression)', async () => {
+      const req = createRequest('POST', '/api/shorten', { url: 'https://example.com' })
+
+      const res = await app.fetch(req, {
+        URL_DB: mockKV,
+        DB: mockD1
+      }, mockExecutionCtx)
+
+      expect(res.status).toBe(201)
+      const json = await res.json() as any
+      expect(json.slug).toMatch(/^[a-zA-Z0-9]{6}$/)
+      expect(json.short_url).toMatch(/^http:\/\/localhost\/[a-zA-Z0-9]{6}$/)
+    })
+
     it('should return 400 when URL is missing', async () => {
       const req = createRequest('POST', '/api/shorten', {})
       

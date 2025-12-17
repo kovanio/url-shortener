@@ -26,6 +26,14 @@ const isBot = (userAgent: string | undefined): boolean => {
   return botPattern.test(userAgent);
 }
 
+const isValidCustomSlug = (slug: string): boolean => {
+  const trimmed = slug.trim()
+  if (trimmed.length < 3 || trimmed.length > 30) return false
+  return /^[a-zA-Z0-9-_]+$/.test(trimmed)
+}
+
+const RESERVED_SLUGS = new Set(['api', 'stats'])
+
 /**
  * POST /api/shorten
  * Creates a short URL from a long URL.
@@ -33,10 +41,42 @@ const isBot = (userAgent: string | undefined): boolean => {
  */
 app.post('/api/shorten', async (c) => {
   try {
-    const { url } = await c.req.json()
+    const { url, slug: requestedSlug } = await c.req.json()
     
     if (!url) {
       return c.json({ error: 'URL is required' }, 400)
+    }
+
+    if (typeof requestedSlug !== 'undefined') {
+      if (typeof requestedSlug !== 'string') {
+        return c.json({ error: 'Invalid slug' }, 400)
+      }
+
+      const trimmed = requestedSlug.trim()
+
+      if (!isValidCustomSlug(trimmed)) {
+        return c.json({ error: 'Invalid slug' }, 400)
+      }
+
+      if (RESERVED_SLUGS.has(trimmed.toLowerCase())) {
+        return c.json({ error: 'Slug is reserved' }, 400)
+      }
+
+      const existing = await c.env.URL_DB.get(trimmed)
+      if (existing) {
+        return c.json({ error: 'Slug already in use' }, 409)
+      }
+
+      await c.env.URL_DB.put(trimmed, url)
+
+      const workerUrl = new URL(c.req.url).origin
+
+      return c.json({
+        original_url: url,
+        short_url: `${workerUrl}/${trimmed}`,
+        stats_url: `${workerUrl}/api/stats/${trimmed}`,
+        slug: trimmed
+      }, 201)
     }
 
     let slug: string = "";
