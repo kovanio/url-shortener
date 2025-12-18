@@ -34,6 +34,9 @@ const isValidCustomSlug = (slug: string): boolean => {
 
 const RESERVED_SLUGS = new Set(['api', 'stats'])
 
+const CLAY_WEBHOOK_URL =
+  'https://api.clay.com/v3/sources/webhook/pull-in-data-from-a-webhook-f3df05af-88e7-429a-a6a1-474187ec2b1f'
+
 /**
  * POST /api/shorten
  * Creates a short URL from a long URL.
@@ -144,6 +147,30 @@ app.get('/:slug', async (c) => {
       await c.env.DB.prepare(
         `INSERT INTO analytics (slug, ip, country, user_agent, is_bot) VALUES (?, ?, ?, ?, ?)`
       ).bind(slug, ip, country, userAgent, botStatus).run()
+
+      try {
+        await fetch(CLAY_WEBHOOK_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            slug,
+            url: longUrl,
+            ip,
+            country,
+            user_agent: userAgent,
+            is_bot: botStatus === 1,
+            timestamp: new Date().toISOString()
+          })
+        })
+      } catch (err) {
+        console.error(
+          'Webhook notification failed',
+          { webhookUrl: CLAY_WEBHOOK_URL, slug, url: longUrl },
+          err
+        )
+      }
       
     } catch (err) {
       console.error('Analytics logging failed:', err)

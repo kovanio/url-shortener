@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import app from './index'
 
 // Mock KV Namespace
@@ -72,7 +72,12 @@ describe('URL Shortener API', () => {
     mockKV = createMockKV()
     mockD1 = createMockD1()
     mockExecutionCtx = createMockExecutionCtx()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('ok', { status: 200 })))
     vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   const createRequest = (method: string, path: string, body?: object, headers?: Record<string, string>) => {
@@ -238,6 +243,79 @@ describe('URL Shortener API', () => {
       expect(res.headers.get('Location')).toBe('https://example.com')
     })
 
+    it('should send a webhook notification on redirect (success)', async () => {
+      mockKV._store.set('abc123', 'https://example.com')
+      const fetchMock = globalThis.fetch as any
+
+      const req = createRequest('GET', '/abc123', undefined, {
+        'User-Agent': 'Mozilla/5.0',
+        'CF-Connecting-IP': '1.2.3.4',
+        'CF-IPCountry': 'US'
+      })
+
+      const res = await app.fetch(req, {
+        URL_DB: mockKV,
+        DB: mockD1
+      }, mockExecutionCtx)
+
+      expect(res.status).toBe(301)
+      expect(res.headers.get('Location')).toBe('https://example.com')
+
+      // Ensure async work finished
+      await mockExecutionCtx.waitUntil.mock.calls[0][0]
+
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+
+      const [url, init] = fetchMock.mock.calls[0] as any
+      expect(url).toBe(
+        'https://api.clay.com/v3/sources/webhook/pull-in-data-from-a-webhook-f3df05af-88e7-429a-a6a1-474187ec2b1f'
+      )
+      expect(init.method).toBe('POST')
+      expect(init.headers).toEqual(
+        expect.objectContaining({
+          'Content-Type': 'application/json'
+        })
+      )
+
+      const payload = JSON.parse(init.body)
+      expect(payload).toEqual(
+        expect.objectContaining({
+          slug: 'abc123',
+          url: 'https://example.com',
+          ip: '1.2.3.4',
+          country: 'US',
+          user_agent: 'Mozilla/5.0'
+        })
+      )
+      expect(payload.is_bot).toBe(false)
+      expect(typeof payload.timestamp).toBe('string')
+    })
+
+    it('should not fail redirect if webhook rejects (resilience)', async () => {
+      mockKV._store.set('abc123', 'https://example.com')
+      const fetchMock = globalThis.fetch as any
+      fetchMock.mockRejectedValueOnce(new Error('webhook down'))
+
+      const req = createRequest('GET', '/abc123', undefined, {
+        'User-Agent': 'Mozilla/5.0',
+        'CF-Connecting-IP': '1.2.3.4',
+        'CF-IPCountry': 'US'
+      })
+
+      const res = await app.fetch(req, {
+        URL_DB: mockKV,
+        DB: mockD1
+      }, mockExecutionCtx)
+
+      expect(res.status).toBe(301)
+      expect(res.headers.get('Location')).toBe('https://example.com')
+
+      // Ensure async work finished (and error was handled)
+      await mockExecutionCtx.waitUntil.mock.calls[0][0]
+
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
     it('should return 404 for non-existent slug', async () => {
       const req = createRequest('GET', '/nonexistent')
       
@@ -269,6 +347,7 @@ describe('URL Shortener API', () => {
 
     it('should detect bot user agents', async () => {
       mockKV._store.set('abc123', 'https://example.com')
+      const fetchMock = globalThis.fetch as any
       
       const req = createRequest('GET', '/abc123', undefined, {
         'User-Agent': 'Googlebot/2.1',
@@ -287,6 +366,11 @@ describe('URL Shortener API', () => {
       expect(mockD1.prepare).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO analytics')
       )
+
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      const [, init] = fetchMock.mock.calls[0] as any
+      const payload = JSON.parse(init.body)
+      expect(payload.is_bot).toBe(true)
     })
   })
 
