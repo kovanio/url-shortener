@@ -20,6 +20,9 @@ node_modules/
 .env.production
 .dev.vars
 
+# Production Wrangler config (contains real IDs - DO NOT COMMIT)
+wrangler.prod.jsonc
+
 # logs
 logs/
 *.log

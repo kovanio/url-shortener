@@ -255,7 +255,8 @@ describe('URL Shortener API', () => {
 
       const res = await app.fetch(req, {
         URL_DB: mockKV,
-        DB: mockD1
+        DB: mockD1,
+        CLAY_WEBHOOK_URL: 'https://example.test/webhook'
       }, mockExecutionCtx)
 
       expect(res.status).toBe(301)
@@ -267,9 +268,7 @@ describe('URL Shortener API', () => {
       expect(fetchMock).toHaveBeenCalledTimes(1)
 
       const [url, init] = fetchMock.mock.calls[0] as any
-      expect(url).toBe(
-        'https://api.clay.com/v3/sources/webhook/pull-in-data-from-a-webhook-f3df05af-88e7-429a-a6a1-474187ec2b1f'
-      )
+      expect(url).toBe('https://example.test/webhook')
       expect(init.method).toBe('POST')
       expect(init.headers).toEqual(
         expect.objectContaining({
@@ -304,7 +303,8 @@ describe('URL Shortener API', () => {
 
       const res = await app.fetch(req, {
         URL_DB: mockKV,
-        DB: mockD1
+        DB: mockD1,
+        CLAY_WEBHOOK_URL: 'https://example.test/webhook'
       }, mockExecutionCtx)
 
       expect(res.status).toBe(301)
@@ -314,6 +314,36 @@ describe('URL Shortener API', () => {
       await mockExecutionCtx.waitUntil.mock.calls[0][0]
 
       expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('should skip webhook when CLAY_WEBHOOK_URL is not set (warn + continue)', async () => {
+      mockKV._store.set('abc123', 'https://example.com')
+      const fetchMock = globalThis.fetch as any
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      const req = createRequest('GET', '/abc123', undefined, {
+        'User-Agent': 'Mozilla/5.0',
+        'CF-Connecting-IP': '1.2.3.4',
+        'CF-IPCountry': 'US'
+      })
+
+      const res = await app.fetch(req, {
+        URL_DB: mockKV,
+        DB: mockD1
+        // CLAY_WEBHOOK_URL intentionally omitted
+      }, mockExecutionCtx)
+
+      expect(res.status).toBe(301)
+      expect(res.headers.get('Location')).toBe('https://example.com')
+
+      // Ensure async work finished
+      await mockExecutionCtx.waitUntil.mock.calls[0][0]
+
+      // Webhook should NOT have been called
+      expect(fetchMock).toHaveBeenCalledTimes(0)
+      expect(warnSpy).toHaveBeenCalledWith('CLAY_WEBHOOK_URL not set, skipping webhook notification')
+
+      warnSpy.mockRestore()
     })
 
     it('should return 404 for non-existent slug', async () => {
@@ -357,7 +387,8 @@ describe('URL Shortener API', () => {
       
       await app.fetch(req, {
         URL_DB: mockKV,
-        DB: mockD1
+        DB: mockD1,
+        CLAY_WEBHOOK_URL: 'https://example.test/webhook'
       }, mockExecutionCtx)
 
       // Wait for async analytics logging

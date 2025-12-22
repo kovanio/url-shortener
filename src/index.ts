@@ -9,6 +9,7 @@ const nanoid = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLM
 type Bindings = {
   URL_DB: KVNamespace // Key-Value store for fast redirects
   DB: D1Database      // SQL database for analytics
+  CLAY_WEBHOOK_URL?: string // Optional webhook URL (set via wrangler secret)
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -33,9 +34,6 @@ const isValidCustomSlug = (slug: string): boolean => {
 }
 
 const RESERVED_SLUGS = new Set(['api', 'stats'])
-
-const CLAY_WEBHOOK_URL =
-  'https://api.clay.com/v3/sources/webhook/pull-in-data-from-a-webhook-f3df05af-88e7-429a-a6a1-474187ec2b1f'
 
 /**
  * POST /api/shorten
@@ -148,28 +146,34 @@ app.get('/:slug', async (c) => {
         `INSERT INTO analytics (slug, ip, country, user_agent, is_bot) VALUES (?, ?, ?, ?, ?)`
       ).bind(slug, ip, country, userAgent, botStatus).run()
 
-      try {
-        await fetch(CLAY_WEBHOOK_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            slug,
-            url: longUrl,
-            ip,
-            country,
-            user_agent: userAgent,
-            is_bot: botStatus === 1,
-            timestamp: new Date().toISOString()
+      // Optional webhook notification
+      const webhookUrl = c.env.CLAY_WEBHOOK_URL
+      if (!webhookUrl) {
+        console.warn('CLAY_WEBHOOK_URL not set, skipping webhook notification')
+      } else {
+        try {
+          await fetch(webhookUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              slug,
+              url: longUrl,
+              ip,
+              country,
+              user_agent: userAgent,
+              is_bot: botStatus === 1,
+              timestamp: new Date().toISOString()
+            })
           })
-        })
-      } catch (err) {
-        console.error(
-          'Webhook notification failed',
-          { webhookUrl: CLAY_WEBHOOK_URL, slug, url: longUrl },
-          err
-        )
+        } catch (err) {
+          console.error(
+            'Webhook notification failed',
+            { webhookUrl, slug, url: longUrl },
+            err
+          )
+        }
       }
       
     } catch (err) {
