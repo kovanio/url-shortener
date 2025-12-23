@@ -1,0 +1,57 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "url-tracker",
+	"main": "src/index.ts",
+	"compatibility_date": "2025-12-13",
+	// Get your KV Namespace ID from: Dashboard → Workers & Pages → KV → Namespace ID
+	// Or via CLI: npx wrangler kv namespace list
+	"kv_namespaces": [
+		{
+			"binding": "URL_DB",
+			"id": "YOUR_KV_NAMESPACE_ID",
+			"remote": true
+		}
+	],
+	// Get your D1 Database ID from: Dashboard → Workers & Pages → D1 → Database ID
+	// Or via CLI: npx wrangler d1 list
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "url-analytics",
+			"database_id": "YOUR_D1_DATABASE_ID",
+			"remote": true
+		}
+	]
+	// "compatibility_flags": [
+	//   "nodejs_compat"
+	// ],
+	// "vars": {
+	//   "MY_VAR": "my-variable"
+	// },
+	// "kv_namespaces": [
+	//   {
+	//     "binding": "MY_KV_NAMESPACE",
+	//     "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+	//   }
+	// ],
+	// "r2_buckets": [
+	//   {
+	//     "binding": "MY_BUCKET",
+	//     "bucket_name": "my-bucket"
+	//   }
+	// ],
+	// "d1_databases": [
+	//   {
+	//     "binding": "MY_DB",
+	//     "database_name": "my-database",
+	//     "database_id": ""
+	//   }
+	// ],
+	// "ai": {
+	//   "binding": "AI"
+	// },
+	// "observability": {
+	//   "enabled": true,
+	//   "head_sampling_rate": 1
+	// }
+}
