@@ -164,7 +164,7 @@ app.get('/:slug', async (c) => {
                 ip,
                 country,
                 user_agent: userAgent,
-                is_bot: botStatus === 1,
+                is_bot: false,
                 timestamp: new Date().toISOString()
               })
             })
