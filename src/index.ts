@@ -146,33 +146,35 @@ app.get('/:slug', async (c) => {
         `INSERT INTO analytics (slug, ip, country, user_agent, is_bot) VALUES (?, ?, ?, ?, ?)`
       ).bind(slug, ip, country, userAgent, botStatus).run()
 
-      // Optional webhook notification
-      const webhookUrl = c.env.CLAY_WEBHOOK_URL
-      if (!webhookUrl) {
-        console.warn('CLAY_WEBHOOK_URL not set, skipping webhook notification')
-      } else {
-        try {
-          await fetch(webhookUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              slug,
-              url: longUrl,
-              ip,
-              country,
-              user_agent: userAgent,
-              is_bot: botStatus === 1,
-              timestamp: new Date().toISOString()
+      // Optional webhook notification (only for non-bot traffic)
+      if (botStatus === 0) {
+        const webhookUrl = c.env.CLAY_WEBHOOK_URL
+        if (!webhookUrl) {
+          console.warn('CLAY_WEBHOOK_URL not set, skipping webhook notification')
+        } else {
+          try {
+            await fetch(webhookUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                slug,
+                url: longUrl,
+                ip,
+                country,
+                user_agent: userAgent,
+                is_bot: botStatus === 1,
+                timestamp: new Date().toISOString()
+              })
             })
-          })
-        } catch (err) {
-          console.error(
-            'Webhook notification failed',
-            { webhookUrl, slug, url: longUrl },
-            err
-          )
+          } catch (err) {
+            console.error(
+              'Webhook notification failed',
+              { webhookUrl, slug, url: longUrl },
+              err
+            )
+          }
         }
       }
       
