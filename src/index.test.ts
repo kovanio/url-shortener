@@ -375,7 +375,7 @@ describe('URL Shortener API', () => {
       expect(mockExecutionCtx.waitUntil).toHaveBeenCalled()
     })
 
-    it('should detect bot user agents', async () => {
+    it('should detect bot user agents and skip webhook notification', async () => {
       mockKV._store.set('abc123', 'https://example.com')
       const fetchMock = globalThis.fetch as any
       
@@ -394,14 +394,13 @@ describe('URL Shortener API', () => {
       // Wait for async analytics logging
       await mockExecutionCtx.waitUntil.mock.calls[0][0]
       
+      // Database logging should still happen for bots
       expect(mockD1.prepare).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO analytics')
       )
 
-      expect(fetchMock).toHaveBeenCalledTimes(1)
-      const [, init] = fetchMock.mock.calls[0] as any
-      const payload = JSON.parse(init.body)
-      expect(payload.is_bot).toBe(true)
+      // Webhook should NOT be called for bot traffic
+      expect(fetchMock).toHaveBeenCalledTimes(0)
     })
   })
 
